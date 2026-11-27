@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Argo CD watches this directory. To move the rollout forward or back, change
+# the one line below, commit and push. Argo CD does the rest.
+#
+#   1-blue      everything on UBI
+#   2-preview   hardened revision deployed at 0% with its own "green" URL
+#   3-split     50% UBI, 50% hardened
+#   4-green     100% hardened, UBI kept for instant rollback
+resources:
+  - ../knative/stages/1-blue

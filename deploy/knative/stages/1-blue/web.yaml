@@ -1,0 +1,41 @@
+# Stage 1-blue: Everything runs on UBI. This is the starting point.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    app.kubernetes.io/part-of: acme-insurance
+spec:
+  template:
+    metadata:
+      # A named revision is immutable. To ship a new build, give it a new name.
+      name: web-ubi
+      labels:
+        app: web
+      annotations:
+        autoscaling.knative.dev/min-scale: "1"
+        autoscaling.knative.dev/max-scale: "5"
+    spec:
+      containers:
+        - image: quay.io/ryan_nix/acme-insurance-web:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: API_URL
+              value: http://quote-api.acme-insurance.svc.cluster.local
+          readinessProbe:
+            httpGet:
+              path: /healthz
+          resources:
+            requests: {cpu: 25m, memory: 64Mi}
+            limits: {memory: 192Mi}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}
+  traffic:
+    - revisionName: web-ubi
+      percent: 100
+      tag: blue

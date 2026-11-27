@@ -1,0 +1,35 @@
+# Argo CD Application for the Acme Insurance demo (OpenShift GitOps).
+#   oc apply -f gitops/application.yaml
+# Change repoURL to wherever you push this repository.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: acme-insurance
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ryannix123/acme-insurance-demo.git
+    targetRevision: main
+    path: deploy/live
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: acme-insurance
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    managedNamespaceMetadata:
+      labels:
+        # Lets the default OpenShift GitOps instance manage this namespace.
+        argocd.argoproj.io/managed-by: openshift-gitops
+  # Knative stamps these annotations on every Service. Without this, Argo CD
+  # would report the Services as out of sync.
+  ignoreDifferences:
+    - group: serving.knative.dev
+      kind: Service
+      jsonPointers:
+        - /metadata/annotations/serving.knative.dev~1creator
+        - /metadata/annotations/serving.knative.dev~1lastModifier

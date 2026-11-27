@@ -1,0 +1,24 @@
+# Deny all ingress by default. Every allowed flow is declared explicitly.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# Only quote-api pods may reach PostgreSQL.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-from-quote-api
+spec:
+  podSelector:
+    matchLabels: {app: acme-db}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: quote-api}
+      ports:
+        - {protocol: TCP, port: 5432}

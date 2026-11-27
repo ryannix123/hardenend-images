@@ -1,0 +1,12 @@
+# Overrides that switch both services to Red Hat Hardened Images.
+services:
+  quote-api:
+    build:
+      dockerfile: Containerfile.hardened
+      args:
+        BASE_LABEL: Red Hat Hardened Images
+  web:
+    build:
+      dockerfile: Containerfile.hardened
+      args:
+        BASE_LABEL: Red Hat Hardened Images

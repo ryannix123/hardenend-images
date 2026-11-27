@@ -1,0 +1,45 @@
+# =============================================================================
+# Acme Insurance: quote-api (.NET 10) on UBI
+#
+# This file and Containerfile.hardened are identical except for the final
+# FROM line. That works because the image never needs a shell: exec-form
+# ENTRYPOINT, no entrypoint script, a numeric non-root user, and nothing
+# installed at run time.
+#
+# The base images are written out in full (no ARG) so that Dependabot can
+# see them and open a pull request when a tag or digest moves.
+#
+# Nothing in this build runs as root.
+# =============================================================================
+# ---------------------------------------------------------------- build
+FROM registry.access.redhat.com/ubi9/dotnet-100:latest AS build
+# The UBI .NET SDK image runs as UID 1001 with a writable /opt/app-root.
+WORKDIR /opt/app-root/src
+COPY --chown=1001:0 QuoteApi.csproj ./
+RUN dotnet restore
+COPY --chown=1001:0 . ./
+RUN dotnet publish -c Release --no-restore -o /opt/app-root/out && \
+    chmod -R g=u /opt/app-root/out
+
+# -------------------------------------------------------------- runtime
+FROM registry.access.redhat.com/ubi9/dotnet-100-aspnet:latest AS runtime
+ARG BASE_LABEL="UBI 9"
+
+LABEL name="acme-insurance-quote-api" \
+      summary="Acme Insurance demo quote API (.NET 10)" \
+      io.k8s.display-name="Acme Insurance quote-api" \
+      io.openshift.expose-services="8080:http"
+
+ENV BASE_IMAGE="${BASE_LABEL}" \
+    ASPNETCORE_HTTP_PORTS=8080 \
+    DOTNET_EnableDiagnostics=0 \
+    DOTNET_gcServer=0 \
+    HOME=/tmp
+
+WORKDIR /app
+COPY --from=build --chown=1001:0 /opt/app-root/out ./
+
+USER 1001
+EXPOSE 8080
+# Exec form is mandatory: the hardened runtime has no shell to interpret a string.
+ENTRYPOINT ["dotnet", "QuoteApi.dll"]

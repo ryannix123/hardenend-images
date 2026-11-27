@@ -1,0 +1,36 @@
+# Local run with rootless Podman:
+#   podman compose up --build                      (UBI bases)
+#   podman compose -f compose.yaml -f compose.hardened.yaml up --build
+services:
+  db:
+    image: quay.io/sclorg/postgresql-16-c9s:latest
+    environment:
+      POSTGRESQL_USER: acme
+      POSTGRESQL_PASSWORD: local-only
+      POSTGRESQL_DATABASE: acme
+    volumes:
+      - acme-db:/var/lib/pgsql/data:Z
+
+  quote-api:
+    build:
+      context: services/quote-api
+      dockerfile: Containerfile
+    environment:
+      DB_HOST: db
+      DB_USER: acme
+      DB_PASSWORD: local-only
+      DB_NAME: acme
+    depends_on: [db]
+
+  web:
+    build:
+      context: services/web
+      dockerfile: Containerfile
+    environment:
+      API_URL: http://quote-api:8080
+    ports:
+      - "8080:8080"
+    depends_on: [quote-api]
+
+volumes:
+  acme-db:

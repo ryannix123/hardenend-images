@@ -1,0 +1,9 @@
+{
+  "name": "acme-insurance-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Acme Insurance demo front end. No runtime dependencies on purpose.",
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": { "start": "node server.js" }
+}

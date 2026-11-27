@@ -1,0 +1,18 @@
+# Knative path. Requests reach the application pods through the Serverless
+# ingress and activator, so allow those namespaces instead of the router.
+# OpenShift Serverless labels its system namespaces with
+# knative.openshift.io/part-of=openshift-serverless.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: knative-services-from-serverless
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: serving.knative.dev/service, operator: Exists}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              knative.openshift.io/part-of: openshift-serverless

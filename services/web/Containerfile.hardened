@@ -1,0 +1,32 @@
+# =============================================================================
+# Acme Insurance: web front end (Node.js 24) on Red Hat Hardened Images
+#
+# This file and Containerfile are identical except for the FROM line.
+# There is no build stage because there is nothing to install: the service
+# uses only what ships with Node.js.
+#
+# The base image is written out in full (no ARG) so that Dependabot can see
+# it and open a pull request when a tag or digest moves.
+#
+# Nothing in this build runs as root.
+# =============================================================================
+FROM registry.access.redhat.com/hi/nodejs:24
+ARG BASE_LABEL="UBI 10"
+
+LABEL name="acme-insurance-web" \
+      summary="Acme Insurance demo front end (Node.js 24)" \
+      io.k8s.display-name="Acme Insurance web" \
+      io.openshift.expose-services="8080:http"
+
+ENV BASE_IMAGE="${BASE_LABEL}" \
+    NODE_ENV=production \
+    PORT=8080
+
+WORKDIR /app
+COPY --chown=1001:0 --chmod=0644 package.json server.js ./
+COPY --chown=1001:0 --chmod=0755 public ./public
+
+USER 1001
+EXPOSE 8080
+# Exec form is mandatory: the hardened runtime has no shell to interpret a string.
+ENTRYPOINT ["node", "server.js"]

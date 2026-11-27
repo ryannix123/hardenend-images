@@ -1,0 +1,54 @@
+# Stage 1-blue: Everything runs on UBI. This is the starting point.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: quote-api
+  labels:
+    app.kubernetes.io/part-of: acme-insurance
+    # Reachable only from inside the cluster. No public URL is created.
+    networking.knative.dev/visibility: cluster-local
+spec:
+  template:
+    metadata:
+      name: quote-api-ubi
+      labels:
+        app: quote-api
+      annotations:
+        # Keep one pod warm so the first quote is not slowed by a cold start.
+        autoscaling.knative.dev/min-scale: "1"
+        autoscaling.knative.dev/max-scale: "5"
+    spec:
+      containers:
+        - image: quay.io/ryan_nix/acme-insurance-quote-api:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - {name: DB_HOST, value: acme-db}
+            - {name: DB_PORT, value: "5432"}
+            - name: DB_NAME
+              valueFrom: {secretKeyRef: {name: acme-db, key: POSTGRESQL_DATABASE}}
+            - name: DB_USER
+              valueFrom: {secretKeyRef: {name: acme-db, key: POSTGRESQL_USER}}
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: acme-db, key: POSTGRESQL_PASSWORD}}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 384Mi}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+  traffic:
+    - revisionName: quote-api-ubi
+      percent: 100
+      tag: blue

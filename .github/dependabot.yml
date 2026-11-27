@@ -1,0 +1,37 @@
+# Dependabot keeps the things this repository depends on current and opens a
+# pull request for each change. Merging a pull request runs the pipeline.
+#
+# For the container base images to be tracked, each FROM line must be a
+# literal image reference (no ARG). To get a pull request every time a base
+# image is REBUILT, not only when its tag changes, pin each FROM to a digest
+# first: run scripts/pin-base-images.sh once and commit the result.
+version: 2
+updates:
+  # Base images in the Containerfiles
+  - package-ecosystem: docker
+    directories:
+      - /services/web
+      - /services/quote-api
+    schedule:
+      interval: daily
+    groups:
+      base-images:
+        patterns: ["*"]
+    ignore:
+      # Moving to a new major runtime (Node.js 26, .NET 11) is a decision, not a patch.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: "base"
+
+  # NuGet packages used by quote-api
+  - package-ecosystem: nuget
+    directory: /services/quote-api
+    schedule:
+      interval: weekly
+
+  # Actions used by the pipeline
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

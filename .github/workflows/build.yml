@@ -1,0 +1,252 @@
+# =============================================================================
+# Acme Insurance demo: build, push, scan and compare
+#
+# Builds each service twice from the same commit: once on UBI (Containerfile)
+# and once on Red Hat Hardened Images (Containerfile.hardened). The two files
+# differ only in the final FROM line, and the pipeline fails if that stops
+# being true. After pushing, each image is scanned and the "compare" job
+# prints one table with all four results.
+#
+# Triggers:
+#   push to main       build + push + scan
+#   pull_request       build only
+#   schedule (02:00)   nightly rebuild, so base image fixes are picked up
+#                      without waiting for an application change
+#   workflow_dispatch  manual run
+#
+# Secrets required (Settings -> Secrets -> Actions):
+#   QUAY_USERNAME   Quay.io username or robot account
+#   QUAY_PASSWORD   Quay.io password or robot token
+#
+# Tags (per service; hardened builds carry the "hardened-" prefix):
+#   :latest            main and scheduled builds, never expires
+#   :YYYY.MM.DD        expires after QUAY_TAG_TTL
+#   :git-<short-sha>   expires after QUAY_TAG_TTL
+# =============================================================================
+name: Build, scan and compare
+
+on:
+  push:
+    branches: [main]
+    paths: ["services/**", ".github/workflows/build.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["services/**"]
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: quay.io
+  NAMESPACE: ryan_nix
+  QUAY_TAG_TTL: 14d
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: "${{ matrix.service }} on ${{ matrix.variant }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: quote-api
+            variant: ubi
+            tag_prefix: ""
+            containerfile: Containerfile
+            base_label: "UBI 9"
+          - service: quote-api
+            variant: hardened
+            tag_prefix: "hardened-"
+            containerfile: Containerfile.hardened
+            base_label: "Red Hat Hardened Images"
+          - service: web
+            variant: ubi
+            tag_prefix: ""
+            containerfile: Containerfile
+            base_label: "UBI 10"
+          - service: web
+            variant: hardened
+            tag_prefix: "hardened-"
+            containerfile: Containerfile.hardened
+            base_label: "Red Hat Hardened Images"
+
+    env:
+      IMAGE_NAME: acme-insurance-${{ matrix.service }}
+      IMAGE_REF: quay.io/ryan_nix/acme-insurance-${{ matrix.service }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The demo's claim is that the two builds differ by one line. Enforce it.
+      - name: Check the two Containerfiles differ only in the final FROM line
+        working-directory: services/${{ matrix.service }}
+        run: |
+          strip() { grep -v -E '^#' "$1" | awk '/^FROM /{last=NR} {line[NR]=$0} END{for(i=1;i<=NR;i++) if(i!=last) print line[i]}'; }
+          if ! diff <(strip Containerfile) <(strip Containerfile.hardened); then
+            echo "::error::Containerfile and Containerfile.hardened differ beyond the final FROM line"
+            exit 1
+          fi
+
+      - name: Compute tags
+        id: meta
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          DATE=$(date -u +%Y.%m.%d)
+          PREFIX="${{ matrix.tag_prefix }}"
+          PUSH_LATEST=false
+          if [[ "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
+            PUSH_LATEST=true
+          fi
+          {
+            echo "tags<<EOF"
+            echo "${IMAGE_REF}:${PREFIX}${DATE}"
+            echo "${IMAGE_REF}:${PREFIX}git-${SHORT_SHA}"
+            [[ "${PUSH_LATEST}" == "true" ]] && echo "${IMAGE_REF}:${PREFIX}latest"
+            echo "EOF"
+            echo "date_tag=${IMAGE_REF}:${PREFIX}${DATE}"
+            echo "git_tag=${IMAGE_REF}:${PREFIX}git-${SHORT_SHA}"
+            echo "latest_tag=${IMAGE_REF}:${PREFIX}latest"
+            echo "push_latest=${PUSH_LATEST}"
+            echo "date=${DATE}"
+            echo "base=$(grep -E '^FROM ' "services/${{ matrix.service }}/${{ matrix.containerfile }}" | tail -1 | awk '{print $2}')"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build image with Buildah
+        id: build
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: ${{ steps.meta.outputs.tags }}
+          context: services/${{ matrix.service }}
+          containerfiles: services/${{ matrix.service }}/${{ matrix.containerfile }}
+          platforms: linux/amd64
+          build-args: |
+            BASE_LABEL=${{ matrix.base_label }}
+          labels: |
+            org.opencontainers.image.title=Acme Insurance ${{ matrix.service }}
+            org.opencontainers.image.description=Acme Insurance demo ${{ matrix.service }} on ${{ matrix.base_label }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.date }}
+            org.opencontainers.image.base.name=${{ steps.meta.outputs.base }}
+
+      # Quay reads quay.expires-after from an image's labels at push time.
+      # The dated and git tags get the label; :latest must not.
+      - name: Mark per-build tags to expire on Quay
+        if: github.event_name != 'pull_request'
+        env:
+          TTL: ${{ env.QUAY_TAG_TTL }}
+          DATE_TAG: ${{ steps.meta.outputs.date_tag }}
+          GIT_TAG: ${{ steps.meta.outputs.git_tag }}
+          LATEST_TAG: ${{ steps.meta.outputs.latest_tag }}
+          PUSH_LATEST: ${{ steps.meta.outputs.push_latest }}
+        run: |
+          set -euo pipefail
+          ctr=$(buildah from --pull=never "${DATE_TAG}")
+          buildah config --label "quay.expires-after=${TTL}" "${ctr}"
+          buildah commit --quiet --format docker "${ctr}" "${DATE_TAG}" >/dev/null
+          buildah rm "${ctr}" >/dev/null
+          buildah tag "${DATE_TAG}" "${GIT_TAG}"
+
+          label() { buildah inspect --type image \
+            --format '{{ index .OCIv1.Config.Labels "quay.expires-after" }}' "$1"; }
+          for T in "${DATE_TAG}" "${GIT_TAG}"; do
+            [[ "$(label "$T")" == "${TTL}" ]] || { echo "::error::$T is missing quay.expires-after"; exit 1; }
+          done
+          if [[ "${PUSH_LATEST}" == "true" ]]; then
+            L=$(label "${LATEST_TAG}")
+            [[ -z "$L" || "$L" == "<no value>" ]] || { echo "::error::${LATEST_TAG} would expire"; exit 1; }
+          fi
+
+      - name: Push to Quay.io
+        id: push
+        if: github.event_name != 'pull_request'
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Generate SBOM
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.meta.outputs.git_tag }}
+          format: spdx-json
+          output-file: ${{ matrix.service }}-${{ matrix.variant }}.sbom.json
+          artifact-name: sbom-${{ matrix.service }}-${{ matrix.variant }}
+          registry-username: ${{ secrets.QUAY_USERNAME }}
+          registry-password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Scan image
+        id: scan
+        if: github.event_name != 'pull_request'
+        uses: anchore/scan-action@v6
+        with:
+          image: ${{ steps.meta.outputs.git_tag }}
+          fail-build: false
+          output-format: json
+          output-file: scan.json
+          registry-username: ${{ secrets.QUAY_USERNAME }}
+          registry-password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Summarise findings
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          count() { jq --arg s "$1" '[.matches[] | select(.vulnerability.severity == $s)] | length' scan.json; }
+          SIZE=$(buildah inspect --type image --format '{{ .Size }}' "${{ steps.meta.outputs.git_tag }}" 2>/dev/null || echo 0)
+          PKGS=$(jq '.packages | length' "${{ matrix.service }}-${{ matrix.variant }}.sbom.json")
+          jq -n \
+            --arg service "${{ matrix.service }}" --arg variant "${{ matrix.variant }}" \
+            --arg base "${{ steps.meta.outputs.base }}" \
+            --argjson critical "$(count Critical)" --argjson high "$(count High)" \
+            --argjson medium "$(count Medium)" --argjson low "$(count Low)" \
+            --argjson packages "${PKGS}" --argjson size "${SIZE:-0}" \
+            '{service:$service, variant:$variant, base:$base, critical:$critical, high:$high, medium:$medium, low:$low, packages:$packages, size:$size}' \
+            > "result-${{ matrix.service }}-${{ matrix.variant }}.json"
+          cat "result-${{ matrix.service }}-${{ matrix.variant }}.json"
+
+      - name: Upload result
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-${{ matrix.service }}-${{ matrix.variant }}
+          path: result-${{ matrix.service }}-${{ matrix.variant }}.json
+
+  compare:
+    name: Compare UBI and Hardened Images
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request' && !cancelled()
+    steps:
+      - name: Download results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: result-*
+          merge-multiple: true
+
+      - name: Write comparison table
+        run: |
+          {
+            echo "## Same commit, two base images"
+            echo ""
+            echo "| Service | Base | Critical | High | Medium | Low | Packages | Size (MB) |"
+            echo "|---|---|---:|---:|---:|---:|---:|---:|"
+            jq -r -s 'sort_by(.service, .variant) | reverse | .[] |
+              "| \(.service) | \(.variant) | \(.critical) | \(.high) | \(.medium) | \(.low) | \(.packages) | \((.size / 1048576) | floor) |"' result-*.json
+            echo ""
+            echo "Findings are from Grype and package counts from Syft, both run against the pushed image."
+            echo "A scanner can only count what it can read. If it does not fully support an image's"
+            echo "package metadata, the number for that image is a floor, not a total."
+          } >> "${GITHUB_STEP_SUMMARY}"

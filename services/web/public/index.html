@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Insurance</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="/"><span class="mark" aria-hidden="true"></span>Acme Insurance</a>
+    <span class="demo-tag">Demo application. No real policies are sold here.</span>
+  </div>
+</header>
+
+<main class="wrap layout">
+  <section class="flow" aria-live="polite">
+    <ol class="steps" id="steps">
+      <li data-step="1">Vehicle</li>
+      <li data-step="2">Driver</li>
+      <li data-step="3">Coverage</li>
+      <li data-step="4">Your quote</li>
+    </ol>
+
+    <form id="quote-form" novalidate>
+      <fieldset class="panel" data-panel="1">
+        <legend>What are you insuring?</legend>
+        <div class="grid">
+          <label>Model year<input id="vehicle-year" type="number" inputmode="numeric" min="1990" max="2027" value="2022" required></label>
+          <label>Make<select id="vehicle-make" required><option value="">Loading makes</option></select></label>
+          <label>Model<input id="vehicle-model" type="text" maxlength="40" value="Meridian" required></label>
+          <label>Miles driven a year<input id="vehicle-miles" type="number" inputmode="numeric" min="1000" max="60000" step="500" value="11000" required></label>
+        </div>
+        <div class="actions"><button type="button" class="btn primary" data-next>Continue</button></div>
+      </fieldset>
+
+      <fieldset class="panel" data-panel="2" hidden>
+        <legend>Who is driving?</legend>
+        <div class="grid">
+          <label>First name<input id="driver-first" type="text" maxlength="40" autocomplete="given-name" value="Jordan" required></label>
+          <label>Last name<input id="driver-last" type="text" maxlength="40" autocomplete="family-name" value="Rivera" required></label>
+          <label>Age<input id="driver-age" type="number" inputmode="numeric" min="16" max="100" value="34" required></label>
+          <label>Years licensed<input id="driver-licensed" type="number" inputmode="numeric" min="0" max="85" value="15" required></label>
+          <label class="span2">Accidents or violations in the last 5 years<input id="driver-incidents" type="number" inputmode="numeric" min="0" max="10" value="0" required></label>
+        </div>
+        <div class="actions"><button type="button" class="btn" data-back>Back</button><button type="button" class="btn primary" data-next>Continue</button></div>
+      </fieldset>
+
+      <fieldset class="panel" data-panel="3" hidden>
+        <legend>How much cover do you want?</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="coverage" value="basic"><span><b>Basic</b>Liability only. The legal minimum.</span></label>
+          <label class="choice"><input type="radio" name="coverage" value="standard" checked><span><b>Standard</b>Liability, collision and theft.</span></label>
+          <label class="choice"><input type="radio" name="coverage" value="premium"><span><b>Premium</b>Everything in Standard, plus rental car and roadside help.</span></label>
+        </div>
+        <div class="actions"><button type="button" class="btn" data-back>Back</button><button type="submit" class="btn primary" id="get-quote">Get my quote</button></div>
+      </fieldset>
+    </form>
+
+    <section class="panel" data-panel="4" hidden>
+      <h2 class="legend">Your quote</h2>
+      <div class="price"><span id="monthly">$0.00</span><small>a month, or <b id="annual">$0.00</b> a year</small></div>
+      <table class="breakdown"><tbody id="breakdown"></tbody></table>
+      <div class="actions"><button type="button" class="btn" id="start-over">Change details</button><button type="button" class="btn primary" id="buy">Buy this policy</button></div>
+    </section>
+
+    <section class="panel done" data-panel="5" hidden>
+      <h2 class="legend">You're covered</h2>
+      <p>Policy number</p>
+      <p class="policy" id="policy-number">ACME-00000000</p>
+      <p id="policy-detail"></p>
+      <div class="actions"><button type="button" class="btn" id="new-quote">Start a new quote</button></div>
+    </section>
+
+    <p class="error" id="error" role="alert" hidden></p>
+  </section>
+
+  <aside class="hood" aria-labelledby="hood-title">
+    <h2 id="hood-title">Under the hood</h2>
+    <p class="hood-note">What each container is built on, read live from the running services.</p>
+    <div id="hood-cards" class="hood-cards"><p class="muted">Checking the services.</p></div>
+  </aside>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

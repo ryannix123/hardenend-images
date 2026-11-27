@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The database, plus the namespace-wide default-deny policy.
+# The "acme-db" Secret is NOT created here, so that no password lives in Git.
+# Create it once by hand; see deploy/db.env.example.
+resources:
+  - postgres.yaml
+  - networkpolicy.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: acme-insurance
