@@ -32,7 +32,7 @@ HEADER = """# ==================================================================
 #     oc process -f deploy/acme-insurance.yaml | oc apply -f -
 #
 #   Deploy the Hardened Images build from the start:
-#     oc process -f deploy/acme-insurance.yaml -p IMAGES=hardened-latest | oc apply -f -
+#     oc process -f deploy/acme-insurance.yaml -p BASE=hardened | oc apply -f -
 #
 #   Open it:
 #     oc get route acme-insurance -o jsonpath='https://{.spec.host}{"\\n"}'
@@ -68,8 +68,8 @@ def main():
             continue
         for c in obj["spec"]["template"]["spec"]["containers"]:
             if c["image"].startswith(REPO + ":"):
-                service = c["image"].split(":")[1].replace("-latest", "")
-                c["image"] = "${IMAGE_REPO}:" + service + "-${IMAGES}"
+                service = c["image"].split(":")[1].replace("-ubi-latest", "")
+                c["image"] = "${IMAGE_REPO}:" + service + "-${BASE}-latest"
 
     secret = {
         "apiVersion": "v1",
@@ -97,9 +97,9 @@ def main():
         },
         "labels": {"app.kubernetes.io/part-of": "acme-insurance"},
         "parameters": [
-            {"name": "IMAGES", "displayName": "Which build to run",
-             "description": '"latest" for the UBI build, "hardened-latest" for the Red Hat Hardened Images build.',
-             "value": "latest", "required": True},
+            {"name": "BASE", "displayName": "Base image",
+             "description": '"ubi" for the UBI build, "hardened" for the Red Hat Hardened Images build.',
+             "value": "ubi", "required": True},
             {"name": "IMAGE_REPO", "displayName": "Image repository",
              "description": "Repository that holds all four images.",
              "value": REPO, "required": True},

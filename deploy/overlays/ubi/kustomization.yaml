@@ -3,6 +3,6 @@ kind: Kustomization
 
 namespace: acme-insurance
 
-# The base already points at the UBI tags (web-latest, quote-api-latest).
+# The base already points at the UBI tags (web-ubi-latest, quote-api-ubi-latest).
 resources:
   - ../../base

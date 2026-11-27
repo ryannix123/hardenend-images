@@ -19,11 +19,11 @@
 #   QUAY_PASSWORD   Quay.io password or robot token
 #
 # Everything is pushed to ONE repository, quay.io/ryan_nix/acme-insurance.
-# Tags carry the service name, and hardened builds add "hardened-":
-#   :web-latest, :web-hardened-latest,
-#   :quote-api-latest, :quote-api-hardened-latest     never expire
-#   :<service>-[hardened-]YYYY.MM.DD                   expire after QUAY_TAG_TTL
-#   :<service>-[hardened-]git-<short-sha>              expire after QUAY_TAG_TTL
+# Every tag names the service and the base image it was built on:
+#   :web-ubi-latest,       :web-hardened-latest,
+#   :quote-api-ubi-latest, :quote-api-hardened-latest   never expire
+#   :<service>-<ubi|hardened>-YYYY.MM.DD                 expire after QUAY_TAG_TTL
+#   :<service>-<ubi|hardened>-git-<short-sha>            expire after QUAY_TAG_TTL
 # =============================================================================
 name: Build, scan and compare
 
@@ -60,7 +60,7 @@ jobs:
         include:
           - service: quote-api
             variant: ubi
-            tag_prefix: ""
+            tag_prefix: "ubi-"
             containerfile: Containerfile
             base_label: "UBI 9"
           - service: quote-api
@@ -70,7 +70,7 @@ jobs:
             base_label: "Red Hat Hardened Images"
           - service: web
             variant: ubi
-            tag_prefix: ""
+            tag_prefix: "ubi-"
             containerfile: Containerfile
             base_label: "UBI 10"
           - service: web

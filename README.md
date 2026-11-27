@@ -61,8 +61,8 @@ I could not pull images or compile .NET where this was written, so check these f
    on `hi/nodejs`; switch to that if you prefer.
 5. **Quay repository.** Create one public repository, `acme-insurance`, under your
    Quay namespace, and set the `QUAY_USERNAME` and `QUAY_PASSWORD` secrets. All four
-   images go there and are told apart by tag: `web-latest`, `web-hardened-latest`,
-   `quote-api-latest` and `quote-api-hardened-latest`.
+   images go there and are told apart by tag: `web-ubi-latest`, `web-hardened-latest`,
+   `quote-api-ubi-latest` and `quote-api-hardened-latest`.
 
 The front end was run and clicked through against a mock API. Nothing else was tested.
 
@@ -108,12 +108,12 @@ oc set image deployment/web web=quay.io/ryan_nix/acme-insurance:web-hardened-lat
 oc set image deployment/quote-api quote-api=quay.io/ryan_nix/acme-insurance:quote-api-hardened-latest
 
 # back to UBI
-oc set image deployment/web web=quay.io/ryan_nix/acme-insurance:web-latest
-oc set image deployment/quote-api quote-api=quay.io/ryan_nix/acme-insurance:quote-api-latest
+oc set image deployment/web web=quay.io/ryan_nix/acme-insurance:web-ubi-latest
+oc set image deployment/quote-api quote-api=quay.io/ryan_nix/acme-insurance:quote-api-ubi-latest
 ```
 
 Refresh the site and the "Under the hood" panel changes from UBI to Hardened Images.
-To start on Hardened Images instead, add `-p IMAGES=hardened-latest` to `oc process`.
+To start on Hardened Images instead, add `-p BASE=hardened` to `oc process`.
 
 Remove everything:
 

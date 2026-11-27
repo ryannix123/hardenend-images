@@ -9,7 +9,7 @@
 #     oc process -f deploy/acme-insurance.yaml | oc apply -f -
 #
 #   Deploy the Hardened Images build from the start:
-#     oc process -f deploy/acme-insurance.yaml -p IMAGES=hardened-latest | oc apply -f -
+#     oc process -f deploy/acme-insurance.yaml -p BASE=hardened | oc apply -f -
 #
 #   Open it:
 #     oc get route acme-insurance -o jsonpath='https://{.spec.host}{"\n"}'
@@ -36,10 +36,10 @@ metadata:
 labels:
   app.kubernetes.io/part-of: acme-insurance
 parameters:
-  - name: IMAGES
-    displayName: Which build to run
-    description: '"latest" for the UBI build, "hardened-latest" for the Red Hat Hardened Images build.'
-    value: latest
+  - name: BASE
+    displayName: Base image
+    description: '"ubi" for the UBI build, "hardened" for the Red Hat Hardened Images build.'
+    value: ubi
     required: true
   - name: IMAGE_REPO
     displayName: Image repository
@@ -171,7 +171,7 @@ objects:
         spec:
           containers:
             - name: quote-api
-              image: ${IMAGE_REPO}:quote-api-${IMAGES}
+              image: ${IMAGE_REPO}:quote-api-${BASE}-latest
               imagePullPolicy: Always
               ports:
                 - containerPort: 8080
@@ -263,7 +263,7 @@ objects:
         spec:
           containers:
             - name: web
-              image: ${IMAGE_REPO}:web-${IMAGES}
+              image: ${IMAGE_REPO}:web-${BASE}-latest
               imagePullPolicy: Always
               ports:
                 - containerPort: 8080
