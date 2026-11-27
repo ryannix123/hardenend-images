@@ -6,9 +6,20 @@ namespace: acme-insurance
 resources:
   - ../../base
 
-# The only difference between the two overlays is the image tag.
-images:
-  - name: quay.io/ryan_nix/acme-insurance-quote-api
-    newTag: hardened-latest
-  - name: quay.io/ryan_nix/acme-insurance-web
-    newTag: hardened-latest
+# The only difference from the ubi overlay is the image tag on each Deployment.
+# Both services live in one Quay repository and are told apart by tag.
+patches:
+  - target:
+      kind: Deployment
+      name: web
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: quay.io/ryan_nix/acme-insurance:web-hardened-latest
+  - target:
+      kind: Deployment
+      name: quote-api
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: quay.io/ryan_nix/acme-insurance:quote-api-hardened-latest

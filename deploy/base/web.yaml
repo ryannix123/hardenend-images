@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: quay.io/ryan_nix/acme-insurance-web
+          image: quay.io/ryan_nix/acme-insurance:web-latest
           imagePullPolicy: Always
           ports:
             - {containerPort: 8080, name: http}

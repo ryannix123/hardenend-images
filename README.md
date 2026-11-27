@@ -59,8 +59,10 @@ I could not pull images or compile .NET where this was written, so check these f
 4. **`USER 1001` on the hardened images.** A numeric user should work anywhere, and
    OpenShift assigns its own UID regardless. OpenClaw uses `${CONTAINER_DEFAULT_USER}`
    on `hi/nodejs`; switch to that if you prefer.
-5. **Quay repositories.** Create `acme-insurance-web` and `acme-insurance-quote-api`
-   under your Quay namespace, and set the `QUAY_USERNAME` and `QUAY_PASSWORD` secrets.
+5. **Quay repository.** Create one public repository, `acme-insurance`, under your
+   Quay namespace, and set the `QUAY_USERNAME` and `QUAY_PASSWORD` secrets. All four
+   images go there and are told apart by tag: `web-latest`, `web-hardened-latest`,
+   `quote-api-latest` and `quote-api-hardened-latest`.
 
 The front end was run and clicked through against a mock API. Nothing else was tested.
 
@@ -135,8 +137,8 @@ SBOM for each with Syft, scans each with Grype, and writes one table to the run 
 | quote-api | hardened | | | | | | |
 
 It also rebuilds every night, so base image fixes arrive without waiting for an
-application change. Dated and git tags expire on Quay after 14 days; `latest` and
-`hardened-latest` do not.
+application change. Dated and git tags expire on Quay after 14 days; the four
+`-latest` tags do not.
 
 ## Read the numbers carefully
 

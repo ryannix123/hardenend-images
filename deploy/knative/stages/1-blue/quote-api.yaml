@@ -19,7 +19,7 @@ spec:
         autoscaling.knative.dev/max-scale: "5"
     spec:
       containers:
-        - image: quay.io/ryan_nix/acme-insurance-quote-api:latest
+        - image: quay.io/ryan_nix/acme-insurance:quote-api-latest
           ports:
             - containerPort: 8080
           env:

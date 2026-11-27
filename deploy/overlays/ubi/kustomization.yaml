@@ -3,12 +3,6 @@ kind: Kustomization
 
 namespace: acme-insurance
 
+# The base already points at the UBI tags (web-latest, quote-api-latest).
 resources:
   - ../../base
-
-# The only difference between the two overlays is the image tag.
-images:
-  - name: quay.io/ryan_nix/acme-insurance-quote-api
-    newTag: latest
-  - name: quay.io/ryan_nix/acme-insurance-web
-    newTag: latest

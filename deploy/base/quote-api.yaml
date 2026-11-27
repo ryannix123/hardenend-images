@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: quote-api
-          image: quay.io/ryan_nix/acme-insurance-quote-api
+          image: quay.io/ryan_nix/acme-insurance:quote-api-latest
           imagePullPolicy: Always
           ports:
             - {containerPort: 8080, name: http}
