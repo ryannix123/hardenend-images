@@ -18,10 +18,12 @@
 #   QUAY_USERNAME   Quay.io username or robot account
 #   QUAY_PASSWORD   Quay.io password or robot token
 #
-# Tags (per service; hardened builds carry the "hardened-" prefix):
-#   :latest            main and scheduled builds, never expires
-#   :YYYY.MM.DD        expires after QUAY_TAG_TTL
-#   :git-<short-sha>   expires after QUAY_TAG_TTL
+# Everything is pushed to ONE repository, quay.io/ryan_nix/acme-insurance.
+# Tags carry the service name, and hardened builds add "hardened-":
+#   :web-latest, :web-hardened-latest,
+#   :quote-api-latest, :quote-api-hardened-latest     never expire
+#   :<service>-[hardened-]YYYY.MM.DD                   expire after QUAY_TAG_TTL
+#   :<service>-[hardened-]git-<short-sha>              expire after QUAY_TAG_TTL
 # =============================================================================
 name: Build, scan and compare
 
@@ -78,8 +80,10 @@ jobs:
             base_label: "Red Hat Hardened Images"
 
     env:
-      IMAGE_NAME: acme-insurance-${{ matrix.service }}
-      IMAGE_REF: quay.io/ryan_nix/acme-insurance-${{ matrix.service }}
+      # One Quay repository for the whole demo. Services and variants are told
+      # apart by tag prefix, the same scheme as the World Monitor project.
+      IMAGE_NAME: acme-insurance
+      IMAGE_REF: quay.io/ryan_nix/acme-insurance
 
     steps:
       - name: Checkout
@@ -100,7 +104,7 @@ jobs:
         run: |
           SHORT_SHA="${GITHUB_SHA::8}"
           DATE=$(date -u +%Y.%m.%d)
-          PREFIX="${{ matrix.tag_prefix }}"
+          PREFIX="${{ matrix.service }}-${{ matrix.tag_prefix }}"
           PUSH_LATEST=false
           if [[ "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
             PUSH_LATEST=true
