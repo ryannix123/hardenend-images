@@ -191,7 +191,7 @@ jobs:
       - name: Scan image
         id: scan
         if: github.event_name != 'pull_request'
-        uses: anchore/scan-action@v6
+        uses: anchore/scan-action@v7
         with:
           image: ${{ steps.meta.outputs.git_tag }}
           fail-build: false
