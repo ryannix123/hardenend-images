@@ -2,7 +2,13 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: web
-  labels: {app: web}
+  labels:
+    app: web
+    app.kubernetes.io/name: web
+    app.kubernetes.io/component: frontend
+    app.openshift.io/runtime: nodejs      # the icon in the console Topology view
+  annotations:
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"quote-api"}]'
 spec:
   replicas: 2
   selector:

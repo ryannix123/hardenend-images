@@ -12,7 +12,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: acme-db
-  labels: {app: acme-db}
+  labels:
+    app: acme-db
+    app.kubernetes.io/name: acme-db
+    app.kubernetes.io/component: database
+    app.openshift.io/runtime: postgresql      # the icon in the console Topology view
 spec:
   replicas: 1
   strategy: {type: Recreate}

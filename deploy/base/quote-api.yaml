@@ -2,7 +2,13 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: quote-api
-  labels: {app: quote-api}
+  labels:
+    app: quote-api
+    app.kubernetes.io/name: quote-api
+    app.kubernetes.io/component: backend
+    app.openshift.io/runtime: dotnet      # the icon in the console Topology view
+  annotations:
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"acme-db"}]'
 spec:
   replicas: 2
   selector:
