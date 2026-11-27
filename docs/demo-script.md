@@ -31,8 +31,7 @@ numeric non-root user, nothing installed at run time.
 ## 4. Switch live (2 minutes)
 
 ```bash
-oc apply -k deploy/overlays/hardened
-oc rollout status deployment/web deployment/quote-api
+scripts/demo.sh switch hardened
 ```
 
 Refresh. The panel now says Red Hat Hardened Images, no shell, no package manager.
@@ -57,6 +56,8 @@ out what that is worth for you is to try it on one of your own services for a sp
 
 ## Where this connects
 
+- **Remediation.** To show a real CVE fix arriving as a pull request and rolling out,
+  see `remediation-demo.md`.
 - **Argo CD and Argo Rollouts.** For a blue-green version of step 4, driven by a Git
   commit, smoke-tested and previewed before customers see it, see `gitops-rollouts.md`.
 - **Patch on build.** The nightly rebuild in the pipeline is that pattern.

@@ -12,6 +12,9 @@
 # =============================================================================
 FROM registry.access.redhat.com/ubi10/nodejs-24-minimal:latest
 ARG BASE_LABEL="UBI 10"
+# Build date of the base image, filled in by the pipeline. The site shows it so you
+# can see a remediation land: an old date before, a recent one after.
+ARG BASE_CREATED="unknown"
 
 LABEL name="acme-insurance-web" \
       summary="Acme Insurance demo front end (Node.js 24)" \
@@ -19,6 +22,7 @@ LABEL name="acme-insurance-web" \
       io.openshift.expose-services="8080:http"
 
 ENV BASE_IMAGE="${BASE_LABEL}" \
+    BASE_CREATED="${BASE_CREATED}" \
     NODE_ENV=production \
     PORT=8080
 

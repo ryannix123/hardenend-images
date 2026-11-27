@@ -51,6 +51,7 @@ function selfInfo() {
     runtime: `Node.js ${process.version}`,
     os: `${process.platform} ${process.arch}`,
     baseImage: process.env.BASE_IMAGE || "unknown",
+    baseCreated: process.env.BASE_CREATED || "unknown",
     hasShell: existsSync("/bin/sh") || existsSync("/usr/bin/sh"),
     hasPackageManager: ["/usr/bin/dnf", "/usr/bin/microdnf", "/usr/bin/rpm", "/usr/bin/npm", "/usr/local/bin/npm"].some(existsSync),
     runsAsRoot: typeof process.getuid === "function" ? process.getuid() === 0 : false,

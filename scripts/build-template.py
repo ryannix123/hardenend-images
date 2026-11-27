@@ -8,6 +8,8 @@ Run from the repository root after changing those manifests:
 Needs PyYAML (pip install --user pyyaml).
 """
 from pathlib import Path
+import json
+
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -33,6 +35,12 @@ HEADER = """# ==================================================================
 #
 #   Deploy the Hardened Images build from the start:
 #     oc process -f deploy/acme-insurance.yaml -p BASE=hardened | oc apply -f -
+#
+#   Switch builds while people watch, and pull new builds on cue:
+#     scripts/demo.sh switch hardened     (or: switch ubi)
+#     scripts/demo.sh pull
+#   The cluster also checks Quay for new builds on its own, about every 15
+#   minutes, and rolls each one out.
 #
 #   Open it:
 #     oc get route acme-insurance -o jsonpath='https://{.spec.host}{"\\n"}'
@@ -61,6 +69,7 @@ def main():
         with open(ROOT / src) as f:
             objects += [d for d in yaml.safe_load_all(f) if d]
 
+    services = []
     for obj in objects:
         # The Template deploys into the current project, so nothing may pin a namespace.
         obj["metadata"].pop("namespace", None)
@@ -69,7 +78,38 @@ def main():
         for c in obj["spec"]["template"]["spec"]["containers"]:
             if c["image"].startswith(REPO + ":"):
                 service = c["image"].split(":")[1].replace("-ubi-latest", "")
+                services.append(service)
                 c["image"] = "${IMAGE_REPO}:" + service + "-${BASE}-latest"
+                # Roll out automatically whenever the ImageStream sees a new build.
+                trigger = [{
+                    "from": {"kind": "ImageStreamTag",
+                             "name": "acme-insurance:" + service + "-${BASE}-latest"},
+                    "fieldPath": 'spec.template.spec.containers[?(@.name=="%s")].image' % c["name"],
+                }]
+                obj["metadata"].setdefault("annotations", {})[
+                    "image.openshift.io/triggers"] = json.dumps(trigger, separators=(",", ":"))
+
+    # One ImageStream that watches every tag the demo uses in Quay. It re-checks
+    # Quay on a schedule, and the Deployment triggers above roll out each new
+    # digest it finds. Nothing is copied into the cluster registry: pods pull
+    # from Quay by digest ("Source" reference policy).
+    image_stream = {
+        "apiVersion": "image.openshift.io/v1",
+        "kind": "ImageStream",
+        "metadata": {"name": "acme-insurance"},
+        "spec": {
+            "lookupPolicy": {"local": False},
+            "tags": [
+                {
+                    "name": f"{svc}-{base}-latest",
+                    "from": {"kind": "DockerImage", "name": "${IMAGE_REPO}:" + f"{svc}-{base}-latest"},
+                    "importPolicy": {"scheduled": True},
+                    "referencePolicy": {"type": "Source"},
+                }
+                for svc in services for base in ("ubi", "hardened")
+            ],
+        },
+    }
 
     secret = {
         "apiVersion": "v1",
@@ -107,7 +147,7 @@ def main():
              "description": "Generated automatically. Never stored in Git.",
              "generate": "expression", "from": "[a-zA-Z0-9]{24}", "required": True},
         ],
-        "objects": [secret] + objects,
+        "objects": [secret, image_stream] + objects,
     }
 
     body = yaml.dump(template, Dumper=Dumper, sort_keys=False, default_flow_style=False, width=120)

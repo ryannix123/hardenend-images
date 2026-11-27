@@ -133,6 +133,15 @@
     dl.appendChild(dt); dl.appendChild(dd);
   }
 
+  // "2026-08-14 (105 days ago)": an old date before a remediation, a recent one after.
+  function age(created) {
+    var d = new Date(created);
+    if (isNaN(d.getTime())) return created;
+    var days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    var when = days <= 0 ? "today" : days === 1 ? "1 day ago" : days + " days ago";
+    return d.toISOString().slice(0, 10) + " (" + when + ")";
+  }
+
   function card(info) {
     var el = document.createElement("div"); el.className = "hcard";
     var base = document.createElement("span");
@@ -145,6 +154,7 @@
       var dl = document.createElement("dl");
       row(dl, "Shell in the image", info.hasShell ? "Yes" : "No", info.hasShell ? "yes" : "no");
       row(dl, "Package manager", info.hasPackageManager ? "Yes" : "No", info.hasPackageManager ? "yes" : "no");
+      if (info.baseCreated && info.baseCreated !== "unknown") row(dl, "Base image built", age(info.baseCreated));
       if (typeof info.runsAsRoot === "boolean") row(dl, "Runs as root", info.runsAsRoot ? "Yes" : "No", info.runsAsRoot ? "yes" : "no");
       el.appendChild(dl);
     }

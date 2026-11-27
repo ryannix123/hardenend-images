@@ -24,6 +24,9 @@ RUN dotnet publish -c Release --no-restore -o /opt/app-root/out && \
 # -------------------------------------------------------------- runtime
 FROM registry.access.redhat.com/ubi9/dotnet-100-aspnet:latest AS runtime
 ARG BASE_LABEL="UBI 9"
+# Build date of the base image, filled in by the pipeline. The site shows it so you
+# can see a remediation land: an old date before, a recent one after.
+ARG BASE_CREATED="unknown"
 
 LABEL name="acme-insurance-quote-api" \
       summary="Acme Insurance demo quote API (.NET 10)" \
@@ -31,6 +34,7 @@ LABEL name="acme-insurance-quote-api" \
       io.openshift.expose-services="8080:http"
 
 ENV BASE_IMAGE="${BASE_LABEL}" \
+    BASE_CREATED="${BASE_CREATED}" \
     ASPNETCORE_HTTP_PORTS=8080 \
     DOTNET_EnableDiagnostics=0 \
     DOTNET_gcServer=0 \

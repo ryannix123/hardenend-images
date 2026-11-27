@@ -40,9 +40,29 @@ app.MapGet("/api/info", () => Results.Ok(new
     runtime = RuntimeInformation.FrameworkDescription,
     os = RuntimeInformation.OSDescription,
     baseImage = Environment.GetEnvironmentVariable("BASE_IMAGE") ?? "unknown",
+    baseCreated = Environment.GetEnvironmentVariable("BASE_CREATED") ?? "unknown",
     hasShell = File.Exists("/bin/sh") || File.Exists("/usr/bin/sh"),
     hasPackageManager = File.Exists("/usr/bin/dnf") || File.Exists("/usr/bin/microdnf") || File.Exists("/usr/bin/rpm"),
+    runsAsRoot = RunsAsRoot(),
 }));
+
+// Reads the real user ID from the kernel, so it works without a shell, without
+// /etc/passwd entries and under OpenShift's random UIDs. Null if unreadable.
+static bool? RunsAsRoot()
+{
+    try
+    {
+        foreach (var line in File.ReadLines("/proc/self/status"))
+        {
+            if (!line.StartsWith("Uid:")) continue;
+            var fields = line.Split(new[] { '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            return fields.Length > 1 && fields[1] == "0";
+        }
+    }
+    catch (IOException) { }
+    catch (UnauthorizedAccessException) { }
+    return null;
+}
 
 app.MapGet("/api/vehicles/makes", () => Results.Ok(new[]
 {

@@ -133,24 +133,21 @@ then creates its own tables.
 
 Switch between the two builds while the audience watches:
 
-To Hardened Images:
-
 ```bash
-oc set image deployment/web web=quay.io/ryan_nix/acme-insurance:web-hardened-latest
-oc set image deployment/quote-api quote-api=quay.io/ryan_nix/acme-insurance:quote-api-hardened-latest
-oc rollout status deployment/web deployment/quote-api
-```
-
-Back to UBI:
-
-```bash
-oc set image deployment/web web=quay.io/ryan_nix/acme-insurance:web-ubi-latest
-oc set image deployment/quote-api quote-api=quay.io/ryan_nix/acme-insurance:quote-api-ubi-latest
-oc rollout status deployment/web deployment/quote-api
+scripts/demo.sh switch hardened     # and: scripts/demo.sh switch ubi
+scripts/demo.sh status              # which build each service runs, and how old its base is
 ```
 
 Refresh the site and the "Under the hood" panel changes from UBI to Hardened Images.
 To start on Hardened Images instead, add `-p BASE=hardened` to `oc process`.
+
+The deployment follows Quay on its own: an ImageStream checks for new builds about
+every 15 minutes, and each new digest rolls out with a normal rolling update. To take
+a new build right now, run `scripts/demo.sh pull`. (Use the script rather than
+`oc set image`, which the cluster would undo.)
+
+**For the full remediation story, an old vulnerable base, the fix arriving as a pull
+request, and the rollout, see [docs/remediation-demo.md](docs/remediation-demo.md).**
 
 Remove everything:
 
@@ -253,8 +250,9 @@ A demo that oversells gets found out in the first technical question. So:
   UBI and hardened overlays stands in for it.
 - **The database stays on its standard image** in this demo.
 - **Tested so far:** the UBI builds and the one-command deploy. The switch to the
-  hardened builds, the Argo CD and Argo Rollouts path and the Dependabot configuration have
-  not yet been confirmed end to end. Walk through them once before presenting.
+  hardened builds, the automatic rollout from Quay, the pull request comment, the
+  Argo CD and Argo Rollouts path and the Dependabot configuration have not yet been
+  confirmed end to end. Walk through them once before presenting.
 
 ## Layout
 
@@ -270,7 +268,10 @@ deploy/live/             the one-line pointer Argo CD watches
 gitops/                  Argo CD Application and the RolloutManager
 .github/workflows/       build, push, SBOM, scan, compare
 .github/dependabot.yml   base image, NuGet and Actions updates
-scripts/                 digest pinning, and the one-file deploy generator
+scripts/demo.sh          day-of-demo helper: status, pull, switch
+scripts/time-machine.sh  pin a base image to an older real build, for the remediation demo
+scripts/                 also: digest pinning and the one-file deploy generator
+docs/remediation-demo.md see it, fix it, ship it, prove it: the full remediation demo
 docs/demo-script.md      a talk track for a ten-minute demo
 docs/gitops-rollouts.md  setup and talk track for the Argo CD and Argo Rollouts path
 ```

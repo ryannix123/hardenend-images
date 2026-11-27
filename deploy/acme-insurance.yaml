@@ -11,6 +11,12 @@
 #   Deploy the Hardened Images build from the start:
 #     oc process -f deploy/acme-insurance.yaml -p BASE=hardened | oc apply -f -
 #
+#   Switch builds while people watch, and pull new builds on cue:
+#     scripts/demo.sh switch hardened     (or: switch ubi)
+#     scripts/demo.sh pull
+#   The cluster also checks Quay for new builds on its own, about every 15
+#   minutes, and rolls each one out.
+#
 #   Open it:
 #     oc get route acme-insurance -o jsonpath='https://{.spec.host}{"\n"}'
 #
@@ -62,6 +68,46 @@ objects:
       POSTGRESQL_USER: acme
       POSTGRESQL_PASSWORD: ${DB_PASSWORD}
       POSTGRESQL_DATABASE: acme
+  - apiVersion: image.openshift.io/v1
+    kind: ImageStream
+    metadata:
+      name: acme-insurance
+    spec:
+      lookupPolicy:
+        local: false
+      tags:
+        - name: quote-api-ubi-latest
+          from:
+            kind: DockerImage
+            name: ${IMAGE_REPO}:quote-api-ubi-latest
+          importPolicy:
+            scheduled: true
+          referencePolicy:
+            type: Source
+        - name: quote-api-hardened-latest
+          from:
+            kind: DockerImage
+            name: ${IMAGE_REPO}:quote-api-hardened-latest
+          importPolicy:
+            scheduled: true
+          referencePolicy:
+            type: Source
+        - name: web-ubi-latest
+          from:
+            kind: DockerImage
+            name: ${IMAGE_REPO}:web-ubi-latest
+          importPolicy:
+            scheduled: true
+          referencePolicy:
+            type: Source
+        - name: web-hardened-latest
+          from:
+            kind: DockerImage
+            name: ${IMAGE_REPO}:web-hardened-latest
+          importPolicy:
+            scheduled: true
+          referencePolicy:
+            type: Source
   - apiVersion: v1
     kind: PersistentVolumeClaim
     metadata:
@@ -159,6 +205,7 @@ objects:
         app.openshift.io/runtime: dotnet
       annotations:
         app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"acme-db"}]'
+        image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"acme-insurance:quote-api-${BASE}-latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"quote-api\")].image"}]'
     spec:
       replicas: 2
       selector:
@@ -251,6 +298,7 @@ objects:
         app.openshift.io/runtime: nodejs
       annotations:
         app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"quote-api"}]'
+        image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"acme-insurance:web-${BASE}-latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"web\")].image"}]'
     spec:
       replicas: 2
       selector:
