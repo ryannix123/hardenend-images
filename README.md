@@ -77,26 +77,66 @@ Then open http://localhost:8080.
 
 ## Deploy to OpenShift
 
+One file, one command. It deploys the front end, the pricing service and PostgreSQL
+into whatever project you are logged in to. There is nothing to edit, no project name
+to pass, and the database password is generated for you.
+
 ```bash
-oc new-project acme-insurance
-cp deploy/db.env.example deploy/db.env              # then change the password
-oc create secret generic acme-db --from-env-file=deploy/db.env
-oc apply -k deploy/overlays/ubi                     # or deploy/overlays/hardened
-oc get route acme-insurance -o jsonpath='{.spec.host}'
+oc process -f deploy/acme-insurance.yaml | oc apply -f -
 ```
+
+No clone needed either; point it at the file on GitHub:
+
+```bash
+oc process -f https://raw.githubusercontent.com/ryannix123/hardenend-images/main/deploy/acme-insurance.yaml | oc apply -f -
+```
+
+Then open it:
+
+```bash
+oc get route acme-insurance -o jsonpath='https://{.spec.host}{"\n"}'
+```
+
+The first start takes a minute or so: the pricing service waits for the database,
+then creates its own tables.
 
 Switch between the two builds while the audience watches:
 
 ```bash
-oc apply -k deploy/overlays/hardened
-oc rollout status deployment/web deployment/quote-api
+# to Hardened Images
+oc set image deployment/web web=quay.io/ryan_nix/acme-insurance:web-hardened-latest
+oc set image deployment/quote-api quote-api=quay.io/ryan_nix/acme-insurance:quote-api-hardened-latest
+
+# back to UBI
+oc set image deployment/web web=quay.io/ryan_nix/acme-insurance:web-latest
+oc set image deployment/quote-api quote-api=quay.io/ryan_nix/acme-insurance:quote-api-latest
 ```
 
 Refresh the site and the "Under the hood" panel changes from UBI to Hardened Images.
+To start on Hardened Images instead, add `-p IMAGES=hardened-latest` to `oc process`.
 
-The manifests run under the `restricted-v2` SCC: non-root, no privilege escalation,
-all capabilities dropped, seccomp `RuntimeDefault`. Network policies deny everything
-by default and allow only router to web, web to quote-api, and quote-api to the database.
+Remove everything:
+
+```bash
+oc delete all,secret,pvc,networkpolicy -l app.kubernetes.io/part-of=acme-insurance
+```
+
+Good to know:
+
+- **Run the deploy once.** Each run generates a new database password. If you run it
+  again, restart the two pods that use it:
+  `oc rollout restart deployment/acme-db deployment/quote-api`.
+- **The Quay repository must be public**, or the project needs a pull secret for it.
+- **It runs under the `restricted-v2` SCC**: non-root, no privilege escalation, all
+  capabilities dropped, seccomp `RuntimeDefault`. No cluster-admin rights are needed,
+  only edit rights in the project.
+- **Network policies deny everything by default** and allow only router to web, web to
+  quote-api, and quote-api to the database.
+
+`deploy/acme-insurance.yaml` is generated from `deploy/db` and `deploy/base` by
+`scripts/build-template.py`. The kustomize overlays (`oc apply -k deploy/overlays/ubi`)
+still work if you prefer them, but they need the `acme-db` Secret created first from
+`deploy/db.env.example`.
 
 ## Optional: blue-green with Argo CD and Knative
 
@@ -156,6 +196,7 @@ application change. Dated and git tags expire on Quay after 14 days; the four
 ```
 services/web/            Node.js 24 front end, no dependencies
 services/quote-api/      .NET 10 minimal API, one dependency (Npgsql)
+deploy/acme-insurance.yaml   the whole app in one file: start here
 deploy/db/               PostgreSQL, default-deny network policy
 deploy/base/             plain Deployments, Services and Route
 deploy/overlays/         ubi and hardened, differing only by image tag
@@ -164,7 +205,7 @@ deploy/live/             the one-line pointer Argo CD watches
 gitops/                  Argo CD Application
 .github/workflows/       build, push, SBOM, scan, compare
 .github/dependabot.yml   base image, NuGet and Actions updates
-scripts/                 one-time digest pinning for the base images
+scripts/                 digest pinning, and the one-file deploy generator
 docs/demo-script.md      a talk track for a ten-minute demo
 docs/gitops-knative.md   setup and talk track for the Argo CD and Knative path
 ```
