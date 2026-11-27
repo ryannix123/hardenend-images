@@ -1,81 +1,110 @@
-# Acme Insurance demo
+# Acme Insurance: smaller target, faster fix
 
-A small car insurance application for showing what changes, and what does not, when
-you move a real workload from Red Hat UBI to Red Hat Hardened Images.
+**When the next critical CVE lands, two questions decide your week: how much of what
+you run is exposed, and how quickly can you safely ship the fix?**
 
-A customer picks a vehicle, enters a driver, chooses a level of cover, gets a price
-and buys a policy. Every service is built twice from the same commit: once on UBI and
-once on Hardened Images. The pipeline scans both and prints one comparison table.
+This repository is a working answer to both. It is a small car insurance application
+(get a quote, buy a policy) built twice from the same commit: once on Red Hat UBI and
+once on Red Hat Hardened Images. You can deploy it in one command, switch between the
+two while people watch, and follow a base image fix from pull request to production.
 
 "Acme Insurance" is fictional. The pricing is invented and no real policies are sold.
 
-## What is in the box
+## The problem
 
-```
-browser ──> web (Node.js 24) ──> quote-api (.NET 10) ──> acme-db (PostgreSQL 16)
-```
+Most of what a scanner flags in a container is not your code. It is everything that
+came along with it: a shell, a package manager, utilities the application never calls.
+Each of those is something to scan, triage, explain to an auditor and patch.
 
-| Component | What it does | UBI base | Hardened base |
+So a CVE week usually goes like this:
+
+1. A scanner lights up across dozens of images.
+2. Teams spend days working out which findings matter.
+3. The fix exists upstream, but it waits for someone to notice, rebuild and schedule a release.
+4. The release is a big-bang cutover, so it waits for a change window.
+
+The exposure is not the hard part. The waiting is.
+
+## Three moves
+
+| | Move | What does it | What changes for you |
 |---|---|---|---|
-| `web` | Serves the site and forwards `/api/*` | `ubi10/nodejs-24-minimal` | `hi/nodejs:24` |
-| `quote-api` | Prices quotes and issues policies | `ubi9/dotnet-100-aspnet` | `hi/aspnet-runtime:10.0` |
-| `acme-db` | Stores quotes and policies | `rhel9/postgresql-16` | not switched in this demo |
+| 1 | **Shrink** the target | Red Hat Hardened Images | Fewer packages in the image, so fewer findings to triage and less for an attacker to use |
+| 2 | **Know** the moment a fix exists | Dependabot | The fix arrives as a pull request, already built and scanned, instead of as a ticket |
+| 3 | **Ship** it without the change window | Argo CD and Knative | The fix is previewed at 0% of traffic, then shifted in, and rolled back in seconds if needed |
 
-## The point of the demo: one line changes
+### 1. Shrink: Hardened Images
 
-Each service has two files, `Containerfile` and `Containerfile.hardened`. They are
-identical except for the final `FROM` line:
+A hardened image carries the runtime and little else. No shell. No package manager.
+
+That matters twice. There is **less to patch**, because a package that is not in the
+image cannot have a CVE filed against your workload. And there is **less to use**,
+because an attacker who finds a way in has no shell to run and no package manager to
+pull tools with.
+
+In this demo the cost of getting there is one line. Each service has two files,
+`Containerfile` and `Containerfile.hardened`, identical except for the final `FROM`:
 
 ```bash
 diff services/web/Containerfile services/web/Containerfile.hardened
 ```
 
-The pipeline fails if they ever differ by more than that. It is possible because the
-services were written so the runtime image never needs a shell:
+The pipeline fails if they ever differ by more than that. Same code, same build, same
+tests, different base.
 
-- `ENTRYPOINT` is in exec form, and there is no entrypoint script.
-- The container runs as a numeric non-root user, and nothing in either build runs as root.
-- Nothing is installed at run time. The web service has no npm dependencies at all.
-- The root filesystem is read-only in OpenShift; `quote-api` gets an `emptyDir` at `/tmp`.
+You do not have to take the claim on trust. The site's "Under the hood" panel reads
+the facts live from the running containers: which base, whether a shell is present,
+whether a package manager is present, whether the process runs as root. Switch builds
+and watch the answers change.
 
-An application that shells out, installs packages at start-up or relies on a debug
-shell will need more work than this one did. Say so when you present it.
+### 2. Know: Dependabot
 
-The site's "Under the hood" panel reads these facts live from the running containers:
-base image, whether a shell is present, whether a package manager is present, and
-whether the process runs as root.
+A smaller image still needs fixes. The question is how you find out.
 
-## Before the first build
+Dependabot watches the base images, the NuGet package and the pipeline's own actions.
+When Red Hat publishes a rebuilt base image, Dependabot opens a pull request. The
+pipeline builds it, generates an SBOM and scans it before anyone merges. The person
+approving sees one small diff and a scan result, not a spreadsheet of findings.
 
-I could not pull images or compile .NET where this was written, so check these first:
+Nobody has to be watching a security feed. Nobody has to remember to rebuild. A
+nightly rebuild runs as a backstop.
 
-1. **Hardened .NET tag.** Confirm `registry.access.redhat.com/hi/aspnet-runtime:10.0`
-   exists at https://images.redhat.com. The Node.js path, `hi/nodejs:24`, is the one
-   already used in the OpenClaw project.
-2. **UBI Node.js tag.** Confirm `ubi10/nodejs-24-minimal`. If it does not exist, use
-   `ubi10/nodejs-24`.
-3. **The .NET code has not been compiled.** Run `dotnet build` in `services/quote-api`
-   or let the pipeline do it, and expect to fix small things.
-4. **`USER 1001` on the hardened images.** A numeric user should work anywhere, and
-   OpenShift assigns its own UID regardless. OpenClaw uses `${CONTAINER_DEFAULT_USER}`
-   on `hi/nodejs`; switch to that if you prefer.
-5. **Quay repository.** Create one public repository, `acme-insurance`, under your
-   Quay namespace, and set the `QUAY_USERNAME` and `QUAY_PASSWORD` secrets. All four
-   images go there and are told apart by tag: `web-ubi-latest`, `web-hardened-latest`,
-   `quote-api-ubi-latest` and `quote-api-hardened-latest`.
+### 3. Ship: Argo CD and Knative
 
-The front end was run and clicked through against a mock API. Nothing else was tested.
+A fix that is built but not deployed protects nobody. This is where most of the
+waiting happens, because a normal release replaces the running version and hopes.
 
-## Run it locally with rootless Podman
+Here, Argo CD makes the cluster match Git, so every change is a commit with an author
+and a diff. Knative keeps each version as its own revision and decides how much
+traffic each one receives. Rolling out a fix becomes four small, reversible steps:
 
-```bash
-podman compose up --build                                            # UBI bases
-podman compose -f compose.yaml -f compose.hardened.yaml up --build   # Hardened Images
-```
+| Step | What customers see | What you can do |
+|---|---|---|
+| Preview | Nothing. The new build runs with **0%** of traffic | Test it at its own URL, in production, with real dependencies |
+| Split | Half of requests go to the new build | Watch errors and latency side by side |
+| Go | Everything is on the new build | The old one is still there |
+| Roll back | Traffic returns to the old build in seconds | `git revert`. It is a traffic change, not a redeploy |
 
-Then open http://localhost:8080.
+When rollback takes seconds and costs nothing, you stop needing a change window to
+ship a security fix.
 
-## Deploy to OpenShift
+Setup and a talk track are in [docs/gitops-knative.md](docs/gitops-knative.md).
+
+## What a CVE looks like with all three
+
+1. Red Hat publishes a rebuilt base image with the fix.
+2. Dependabot opens a pull request the next morning. The pipeline has already built
+   and scanned it.
+3. A person reads a one-line diff and a clean scan, and merges.
+4. One commit previews the new build at 0% of traffic. Another shifts traffic to it.
+5. If anything looks wrong, one `git revert` puts traffic back.
+
+Two human decisions, both small, both recorded in Git. The rest is automation.
+
+If the flaw is in a package the hardened image never shipped, there is no step 1.
+Nothing to fix is the fastest fix there is.
+
+## See it in five minutes
 
 One file, one command. It deploys the front end, the pricing service and PostgreSQL
 into whatever project you are logged in to. There is nothing to edit, no project name
@@ -102,14 +131,20 @@ then creates its own tables.
 
 Switch between the two builds while the audience watches:
 
+To Hardened Images:
+
 ```bash
-# to Hardened Images
 oc set image deployment/web web=quay.io/ryan_nix/acme-insurance:web-hardened-latest
 oc set image deployment/quote-api quote-api=quay.io/ryan_nix/acme-insurance:quote-api-hardened-latest
+oc rollout status deployment/web deployment/quote-api
+```
 
-# back to UBI
+Back to UBI:
+
+```bash
 oc set image deployment/web web=quay.io/ryan_nix/acme-insurance:web-ubi-latest
 oc set image deployment/quote-api quote-api=quay.io/ryan_nix/acme-insurance:quote-api-ubi-latest
+oc rollout status deployment/web deployment/quote-api
 ```
 
 Refresh the site and the "Under the hood" panel changes from UBI to Hardened Images.
@@ -138,20 +173,55 @@ Good to know:
 still work if you prefer them, but they need the `acme-db` Secret created first from
 `deploy/db.env.example`.
 
-## Optional: blue-green with Argo CD and Knative
+### Run it locally with rootless Podman
 
-A second deployment path puts the same two builds behind OpenShift GitOps and
-OpenShift Serverless. Argo CD syncs from Git, Knative keeps UBI and Hardened Images
-as two revisions, and four one-line commits move traffic from 100% blue to a 0%
-preview, a 50/50 split and 100% green. See [docs/gitops-knative.md](docs/gitops-knative.md).
+```bash
+podman compose up --build                                            # UBI bases
+podman compose -f compose.yaml -f compose.hardened.yaml up --build   # Hardened Images
+```
 
-## Keeping base images current
+Then open http://localhost:8080.
 
-`.github/dependabot.yml` asks Dependabot to watch the base images in the Containerfiles,
-the NuGet package and the GitHub Actions, and to open a pull request when one changes.
-Merging it runs the pipeline.
 
-Two things make that work:
+## What is in the box
+
+```
+browser ──> web (Node.js 24) ──> quote-api (.NET 10) ──> acme-db (PostgreSQL 16)
+```
+
+| Component | What it does | UBI base | Hardened base |
+|---|---|---|---|
+| `web` | Serves the site and forwards `/api/*` | `ubi10/nodejs-24-minimal` | `hi/nodejs:24` |
+| `quote-api` | Prices quotes and issues policies | `ubi9/dotnet-100-aspnet` | `hi/aspnet-runtime:10.0` |
+| `acme-db` | Stores quotes and policies | `rhel9/postgresql-16` | not switched in this demo |
+
+### Why one line was enough
+
+The services were written so the runtime image never needs a shell:
+
+- `ENTRYPOINT` is in exec form, and there is no entrypoint script.
+- The container runs as a numeric non-root user, and nothing in either build runs as root.
+- Nothing is installed at run time. The web service has no npm dependencies at all.
+- The root filesystem is read-only in OpenShift; `quote-api` gets an `emptyDir` at `/tmp`.
+
+These are good habits on any base image. They are also the checklist for whether your
+own application is ready to move.
+
+### The pipeline
+
+`.github/workflows/build.yml` builds all four images with rootless Buildah, pushes them
+to one Quay repository, generates an SBOM for each with Syft, scans each with Grype,
+and writes a table to the run summary: critical, high, medium and low findings, package
+count and size, UBI beside hardened, for the same commit. Open the latest run under
+**Actions** to see the current numbers.
+
+Images are told apart by tag: `web-ubi-latest`, `web-hardened-latest`,
+`quote-api-ubi-latest` and `quote-api-hardened-latest`. Dated and git tags expire on
+Quay after 14 days; the four `-latest` tags do not.
+
+### Dependabot setup
+
+`.github/dependabot.yml` is already in place. Two things make it work:
 
 - **The base images are written out in full.** Dependabot cannot follow a `FROM` built
   from an `ARG`, which is why each service has two Containerfiles in place of one
@@ -161,35 +231,28 @@ Two things make that work:
   `scripts/pin-base-images.sh` (needs skopeo, runs rootless) and commit the result.
   After that, every rebuilt base image arrives as a pull request.
 
-The nightly rebuild in the pipeline stays as a backstop. Neither has been run against
-this repository yet, so check Dependabot's first pull request carefully.
+To build your own copy, create one public Quay repository named `acme-insurance` and
+set the `QUAY_USERNAME` and `QUAY_PASSWORD` secrets in GitHub.
 
-## The pipeline
+## What this demo does not claim
 
-`.github/workflows/build.yml` builds all four images, pushes them to Quay, generates an
-SBOM for each with Syft, scans each with Grype, and writes one table to the run summary:
+A demo that oversells gets found out in the first technical question. So:
 
-| Service | Base | Critical | High | Medium | Low | Packages | Size (MB) |
-|---|---|---:|---:|---:|---:|---:|---:|
-| web | ubi | | | | | | |
-| web | hardened | | | | | | |
-| quote-api | ubi | | | | | | |
-| quote-api | hardened | | | | | | |
-
-It also rebuilds every night, so base image fixes arrive without waiting for an
-application change. Dated and git tags expire on Quay after 14 days; the four
-`-latest` tags do not.
-
-## Read the numbers carefully
-
-- **A scanner counts only what it can read.** Hardened images often ship without a
-  package manager. If a scanner does not fully support them, its number is a floor.
-  Compare the Grype result here with what Quay shows, and look at the package count
-  from the SBOM as a second signal.
-- **Hardened images reduce what surrounds the runtime.** A flaw in .NET or Node.js
-  itself still needs a patched image and a rebuild, on either base.
-- **This application was built to make the switch easy.** The honest claim is "one line
-  differs for an application written this way", not "one line for any application".
+- **Hardened images reduce what surrounds the runtime, not the runtime.** A flaw in
+  .NET or Node.js itself still needs a patched image and a rebuild, on either base.
+  That is what moves 2 and 3 are for.
+- **A scanner counts only what it can read.** Hardened images ship without a package
+  manager, and a scanner that does not fully support them may under-report. Treat a
+  low number as a floor, and use the SBOM package count as a second signal.
+- **One line was enough for this application.** One that shells out, installs packages
+  at start-up or relies on a debug shell will need more work first.
+- **Promotion is a commit, on purpose.** Dependabot and the pipeline are automatic.
+  Moving traffic is a person changing one line in Git. In real use the pipeline would
+  write each new image digest into Git; here the Knative revisions use fixed names.
+- **The database stays on its standard image** in this demo.
+- **Tested so far:** the builds, the one-command deploy and the plain Deployment path.
+  The Argo CD and Knative path and the Dependabot configuration have not yet been run
+  end to end. Walk through them once before presenting.
 
 ## Layout
 
