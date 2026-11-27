@@ -57,8 +57,8 @@ out what that is worth for you is to try it on one of your own services for a sp
 
 ## Where this connects
 
-- **Argo CD and Knative.** For a blue-green version of step 4, driven by Git commits,
-  see `gitops-knative.md`.
+- **Argo CD and Argo Rollouts.** For a blue-green version of step 4, driven by a Git
+  commit, smoke-tested and previewed before customers see it, see `gitops-rollouts.md`.
 - **Patch on build.** The nightly rebuild in the pipeline is that pattern.
 - **Advanced Cluster Security.** Point ACS at the `acme-insurance` namespace to show
   both variants side by side, and use the network policies as the "fence" example.

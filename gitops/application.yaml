@@ -1,6 +1,6 @@
 # Argo CD Application for the Acme Insurance demo (OpenShift GitOps).
 #   oc apply -f gitops/application.yaml
-# Change repoURL to wherever you push this repository.
+# Change repoURL if you push this repository somewhere else.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -9,7 +9,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/ryannix123/acme-insurance-demo.git
+    repoURL: https://github.com/ryannix123/hardenend-images.git
     targetRevision: main
     path: deploy/live
   destination:
@@ -25,11 +25,3 @@ spec:
       labels:
         # Lets the default OpenShift GitOps instance manage this namespace.
         argocd.argoproj.io/managed-by: openshift-gitops
-  # Knative stamps these annotations on every Service. Without this, Argo CD
-  # would report the Services as out of sync.
-  ignoreDifferences:
-    - group: serving.knative.dev
-      kind: Service
-      jsonPointers:
-        - /metadata/annotations/serving.knative.dev~1creator
-        - /metadata/annotations/serving.knative.dev~1lastModifier

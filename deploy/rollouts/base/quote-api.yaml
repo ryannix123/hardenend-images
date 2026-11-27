@@ -1,0 +1,90 @@
+# Same pod spec as deploy/base/quote-api.yaml, run as an Argo Rollout in place of a Deployment.
+# Argo Rollouts adds a pod-template-hash to each Service selector to steer traffic.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: quote-api
+  labels:
+    app: quote-api
+    app.kubernetes.io/name: quote-api
+    app.kubernetes.io/component: backend
+    app.openshift.io/runtime: dotnet      # the icon in the console Topology view
+  annotations:
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"acme-db"}]'
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    blueGreen:
+      activeService: quote-api
+      previewService: quote-api-preview
+      # The machine gate: promote on its own as soon as the smoke test passes,
+      # and never promote if it fails.
+      autoPromotionEnabled: true
+      prePromotionAnalysis:
+        templates:
+          - templateName: smoke-test
+        args:
+          - {name: url, value: "http://quote-api-preview:8080/readyz"}
+      scaleDownDelaySeconds: 600
+  selector:
+    matchLabels: {app: quote-api}
+  template:
+    metadata:
+      labels: {app: quote-api}
+    spec:
+      containers:
+        - name: quote-api
+          image: quay.io/ryan_nix/acme-insurance:quote-api-ubi-latest
+          imagePullPolicy: Always
+          ports:
+            - {containerPort: 8080, name: http}
+          env:
+            - {name: DB_HOST, value: acme-db}
+            - {name: DB_PORT, value: "5432"}
+            - name: DB_NAME
+              valueFrom: {secretKeyRef: {name: acme-db, key: POSTGRESQL_DATABASE}}
+            - name: DB_USER
+              valueFrom: {secretKeyRef: {name: acme-db, key: POSTGRESQL_USER}}
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: acme-db, key: POSTGRESQL_PASSWORD}}
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 384Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quote-api
+spec:
+  selector: {app: quote-api}
+  ports:
+    - {port: 8080, targetPort: http, name: http}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quote-api-preview
+spec:
+  selector: {app: quote-api}
+  ports:
+    - {port: 8080, targetPort: http, name: http}

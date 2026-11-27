@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The Argo Rollouts path: the same application, with web and quote-api run as
+# Rollouts so a new build is previewed and smoke-tested before it takes traffic.
+# Needs OpenShift GitOps with a RolloutManager. See docs/gitops-rollouts.md.
+resources:
+  - ../../db
+  - web.yaml
+  - quote-api.yaml
+  - analysis.yaml
+  - networkpolicy.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: acme-insurance

@@ -31,7 +31,7 @@ The exposure is not the hard part. The waiting is.
 |---|---|---|---|
 | 1 | **Shrink** the target | Red Hat Hardened Images | Fewer packages in the image, so fewer findings to triage and less for an attacker to use |
 | 2 | **Know** the moment a fix exists | Dependabot | The fix arrives as a pull request, already built and scanned, instead of as a ticket |
-| 3 | **Ship** it without the change window | Argo CD and Knative | The fix is previewed at 0% of traffic, then shifted in, and rolled back in seconds if needed |
+| 3 | **Ship** it without the change window | Argo CD and Argo Rollouts | The fix is tested and previewed beside the live version, switched in, and rolled back in seconds if needed |
 
 ### 1. Shrink: Hardened Images
 
@@ -69,26 +69,27 @@ approving sees one small diff and a scan result, not a spreadsheet of findings.
 Nobody has to be watching a security feed. Nobody has to remember to rebuild. A
 nightly rebuild runs as a backstop.
 
-### 3. Ship: Argo CD and Knative
+### 3. Ship: Argo CD and Argo Rollouts
 
 A fix that is built but not deployed protects nobody. This is where most of the
 waiting happens, because a normal release replaces the running version and hopes.
 
 Here, Argo CD makes the cluster match Git, so every change is a commit with an author
-and a diff. Knative keeps each version as its own revision and decides how much
-traffic each one receives. Rolling out a fix becomes four small, reversible steps:
+and a diff. Argo Rollouts runs the new build beside the old one and moves customers
+only when it is allowed to. Both ship with OpenShift GitOps.
 
-| Step | What customers see | What you can do |
+| Step | What customers see | What happens |
 |---|---|---|
-| Preview | Nothing. The new build runs with **0%** of traffic | Test it at its own URL, in production, with real dependencies |
-| Split | Half of requests go to the new build | Watch errors and latency side by side |
-| Go | Everything is on the new build | The old one is still there |
-| Roll back | Traffic returns to the old build in seconds | `git revert`. It is a traffic change, not a redeploy |
+| Commit | Nothing | The new build starts beside the live one |
+| Test | Nothing | A smoke test runs against the new build. If it fails, the rollout stops here |
+| Preview | Nothing | The new build is reachable at its own URL, in production, with real dependencies |
+| Promote | The new build | One command, or automatic once the test passes. The old build keeps running |
+| Roll back | The old build, in seconds | `git revert`. It is a traffic switch, not a redeploy |
 
 When rollback takes seconds and costs nothing, you stop needing a change window to
 ship a security fix.
 
-Setup and a talk track are in [docs/gitops-knative.md](docs/gitops-knative.md).
+Setup and a talk track are in [docs/gitops-rollouts.md](docs/gitops-rollouts.md).
 
 ## What a CVE looks like with all three
 
@@ -96,10 +97,11 @@ Setup and a talk track are in [docs/gitops-knative.md](docs/gitops-knative.md).
 2. Dependabot opens a pull request the next morning. The pipeline has already built
    and scanned it.
 3. A person reads a one-line diff and a clean scan, and merges.
-4. One commit previews the new build at 0% of traffic. Another shifts traffic to it.
+4. That commit starts a rollout. The new build is smoke-tested and previewed beside
+   the live one, then promoted.
 5. If anything looks wrong, one `git revert` puts traffic back.
 
-Two human decisions, both small, both recorded in Git. The rest is automation.
+Two human decisions, merge and promote, both small. The rest is automation.
 
 If the flaw is in a package the hardened image never shipped, there is no step 1.
 Nothing to fix is the fastest fix there is.
@@ -246,13 +248,13 @@ A demo that oversells gets found out in the first technical question. So:
   low number as a floor, and use the SBOM package count as a second signal.
 - **One line was enough for this application.** One that shells out, installs packages
   at start-up or relies on a debug shell will need more work first.
-- **Promotion is a commit, on purpose.** Dependabot and the pipeline are automatic.
-  Moving traffic is a person changing one line in Git. In real use the pipeline would
-  write each new image digest into Git; here the Knative revisions use fixed names.
+- **A rollout starts from a commit.** In real use the pipeline would write each new
+  image digest into Git, and that commit ships the fix. Here, switching between the
+  UBI and hardened overlays stands in for it.
 - **The database stays on its standard image** in this demo.
-- **Tested so far:** the builds, the one-command deploy and the plain Deployment path.
-  The Argo CD and Knative path and the Dependabot configuration have not yet been run
-  end to end. Walk through them once before presenting.
+- **Tested so far:** the UBI builds and the one-command deploy. The switch to the
+  hardened builds, the Argo CD and Argo Rollouts path and the Dependabot configuration have
+  not yet been confirmed end to end. Walk through them once before presenting.
 
 ## Layout
 
@@ -263,12 +265,12 @@ deploy/acme-insurance.yaml   the whole app in one file: start here
 deploy/db/               PostgreSQL, default-deny network policy
 deploy/base/             plain Deployments, Services and Route
 deploy/overlays/         ubi and hardened, differing only by image tag
-deploy/knative/          Knative Services in four blue-green stages
+deploy/rollouts/         the same app as Argo Rollouts: blue-green, smoke test, preview
 deploy/live/             the one-line pointer Argo CD watches
-gitops/                  Argo CD Application
+gitops/                  Argo CD Application and the RolloutManager
 .github/workflows/       build, push, SBOM, scan, compare
 .github/dependabot.yml   base image, NuGet and Actions updates
 scripts/                 digest pinning, and the one-file deploy generator
 docs/demo-script.md      a talk track for a ten-minute demo
-docs/gitops-knative.md   setup and talk track for the Argo CD and Knative path
+docs/gitops-rollouts.md  setup and talk track for the Argo CD and Argo Rollouts path
 ```

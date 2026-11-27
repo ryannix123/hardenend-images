@@ -1,0 +1,49 @@
+# Argo Rollouts path: router -> web -> quote-api, plus the smoke-test Job.
+# (default-deny and the database rule live in deploy/db.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-from-router
+spec:
+  podSelector:
+    matchLabels: {app: web}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: quote-api-from-web
+spec:
+  podSelector:
+    matchLabels: {app: quote-api}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: web}
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+# The smoke-test Job is the only extra caller the Argo Rollouts path needs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: apps-from-smoke-test
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: app, operator: In, values: [web, quote-api]}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {role: smoke-test}
+      ports:
+        - {protocol: TCP, port: 8080}

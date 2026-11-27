@@ -1,0 +1,103 @@
+# Same pod spec as deploy/base/web.yaml, run as an Argo Rollout in place of a Deployment.
+# Argo Rollouts adds a pod-template-hash to each Service selector to steer traffic.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: web
+  labels:
+    app: web
+    app.kubernetes.io/name: web
+    app.kubernetes.io/component: frontend
+    app.openshift.io/runtime: nodejs      # the icon in the console Topology view
+  annotations:
+    app.openshift.io/connects-to: '[{"apiVersion":"argoproj.io/v1alpha1","kind":"Rollout","name":"quote-api"}]'
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    blueGreen:
+      activeService: web                 # customers
+      previewService: web-preview        # the new build, before anyone sees it
+      # The human gate: after the smoke test passes, wait for a person to promote.
+      autoPromotionEnabled: false
+      prePromotionAnalysis:
+        templates:
+          - templateName: smoke-test
+        args:
+          - {name: url, value: "http://web-preview:8080/api/info"}
+      # Keep the old build running for 10 minutes after promotion, so a rollback
+      # is a traffic switch and not a redeploy.
+      scaleDownDelaySeconds: 600
+  selector:
+    matchLabels: {app: web}
+  template:
+    metadata:
+      labels: {app: web}
+    spec:
+      containers:
+        - name: web
+          image: quay.io/ryan_nix/acme-insurance:web-ubi-latest
+          imagePullPolicy: Always
+          ports:
+            - {containerPort: 8080, name: http}
+          env:
+            - {name: API_URL, value: "http://quote-api:8080"}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 25m, memory: 64Mi}
+            limits: {memory: 192Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector: {app: web}
+  ports:
+    - {port: 8080, targetPort: http, name: http}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: acme-insurance
+spec:
+  to: {kind: Service, name: web}
+  port: {targetPort: http}
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+# Follows the NEW build while a rollout is in progress. Argo Rollouts points it
+# at the new ReplicaSet; the "web" Service stays on the old one until promotion.
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-preview
+spec:
+  selector: {app: web}
+  ports:
+    - {port: 8080, targetPort: http, name: http}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: acme-insurance-preview
+spec:
+  to: {kind: Service, name: web-preview}
+  port: {targetPort: http}
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

@@ -1,0 +1,9 @@
+# Turns on Argo Rollouts, which ships with OpenShift GitOps. Apply once per
+# cluster, as a cluster administrator:
+#   oc apply -f gitops/rolloutmanager.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: RolloutManager
+metadata:
+  name: argo-rollout
+  namespace: openshift-gitops
+spec: {}

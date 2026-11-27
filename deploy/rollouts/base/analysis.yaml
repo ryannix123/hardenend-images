@@ -1,0 +1,50 @@
+# The smoke test Argo Rollouts runs against a new build BEFORE it can take traffic.
+# It is a short Job that calls the preview Service from inside the project.
+# Pass: the rollout may proceed. Fail: the rollout aborts and customers never see it.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: smoke-test
+spec:
+  args:
+    - name: url
+  metrics:
+    - name: responds
+      failureLimit: 0
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            activeDeadlineSeconds: 120
+            template:
+              metadata:
+                labels: {role: smoke-test}
+              spec:
+                restartPolicy: Never
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile: {type: RuntimeDefault}
+                containers:
+                  - name: curl
+                    # A test tool, not part of the application, so a shell here is fine.
+                    image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+                    command: ["curl"]
+                    args:
+                      - --fail
+                      - --silent
+                      - --show-error
+                      - --retry
+                      - "10"
+                      - --retry-delay
+                      - "3"
+                      - --retry-all-errors
+                      - --max-time
+                      - "5"
+                      - "{{args.url}}"
+                    resources:
+                      requests: {cpu: 10m, memory: 16Mi}
+                      limits: {memory: 64Mi}
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities: {drop: [ALL]}
