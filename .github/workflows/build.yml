@@ -87,7 +87,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # The demo's claim is that the two builds differ by one line. Enforce it.
       - name: Check the two Containerfiles differ only in the final FROM line
@@ -125,7 +125,7 @@ jobs:
 
       - name: Build image with Buildah
         id: build
-        uses: redhat-actions/buildah-build@v2
+        uses: redhat-actions/buildah-build@v3
         with:
           image: ${{ env.IMAGE_NAME }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -173,11 +173,10 @@ jobs:
       - name: Push to Quay.io
         id: push
         if: github.event_name != 'pull_request'
-        uses: redhat-actions/push-to-registry@v2
+        uses: redhat-actions/push-to-registry@v3
         with:
-          image: ${{ steps.build.outputs.image }}
+          # The tags are full names (quay.io/...), so no image or registry input.
           tags: ${{ steps.build.outputs.tags }}
-          registry: ${{ env.REGISTRY }}
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
 
@@ -195,14 +194,18 @@ jobs:
       - name: Scan image
         id: scan
         if: github.event_name != 'pull_request'
-        uses: anchore/scan-action@v6
+        uses: anchore/scan-action@v7
         with:
           image: ${{ steps.meta.outputs.git_tag }}
+          # Report only. The comparison table is the output; findings never fail the build.
           fail-build: false
           output-format: json
           output-file: scan.json
-          registry-username: ${{ secrets.QUAY_USERNAME }}
-          registry-password: ${{ secrets.QUAY_PASSWORD }}
+        # Only needed if the Quay repository is private; harmless when it is public.
+        env:
+          GRYPE_REGISTRY_AUTH_AUTHORITY: quay.io
+          GRYPE_REGISTRY_AUTH_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          GRYPE_REGISTRY_AUTH_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
 
       - name: Summarise findings
         if: github.event_name != 'pull_request'
@@ -223,7 +226,7 @@ jobs:
 
       - name: Upload result
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: result-${{ matrix.service }}-${{ matrix.variant }}
           path: result-${{ matrix.service }}-${{ matrix.variant }}.json
@@ -235,7 +238,7 @@ jobs:
     if: github.event_name != 'pull_request' && !cancelled()
     steps:
       - name: Download results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: result-*
           merge-multiple: true
