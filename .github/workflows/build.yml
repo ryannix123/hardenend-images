@@ -312,7 +312,7 @@ jobs:
     if: github.event_name != 'pull_request' && !cancelled()
     steps:
       - name: Download results
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: result-*
           merge-multiple: true
@@ -342,7 +342,7 @@ jobs:
       pull-requests: write    # to post the comment, including on Dependabot's pull requests
     steps:
       - name: Download results
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: pr-result-*
           merge-multiple: true
